@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vuolas — Suomen jokivirtaamat | Finland Live River Flow</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1320'/%3E%3Cpath d='M5 13c4-4 7 4 11 0s7 4 11 0M5 20c4-4 7 4 11 0s7 4 11 0' fill='none' stroke='%2338bdf8' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+    <canvas id="flow-canvas" aria-hidden="true"></canvas>
+
+    <!-- Left Control Rail -->
+    <aside class="control-rail" id="control-rail">
+      <div class="rail-header">
+        <div>
+          <div class="eyebrow">SUOMEN JOKIVIRTAAMAT · LIVE</div>
+          <h1>Vuolas</h1>
+        </div>
+        <div class="header-actions">
+          <button class="pill-btn" id="btn-metrics" title="Open live hydrological metrics &amp; report" aria-label="Open metrics">Metrics</button>
+          <button class="pill-btn" id="btn-info" title="Open beginner's guide &amp; glossary" aria-label="Open guide">? Guide</button>
+          <button class="icon-btn" id="btn-collapse" title="Minimize panel" aria-label="Minimize panel">−</button>
+        </div>
+      </div>
+
+      <div id="rail-body">
+        <p class="subtitle" id="status-line">Connecting to SYKE hydrological data…</p>
+
+        <!-- National KPI Summary -->
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-val" id="kpi-stations">—</span>
+            <span class="kpi-lbl">Stations</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-val" id="kpi-median">—</span>
+            <span class="kpi-lbl">Median Pct</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-val kpi-high" id="kpi-high">—</span>
+            <span class="kpi-lbl">High (≥p85)</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-val kpi-low" id="kpi-low">—</span>
+            <span class="kpi-lbl">Low (≤p15)</span>
+          </div>
+        </div>
+
+        <!-- Station Search -->
+        <div class="search-wrap">
+          <input
+            type="search"
+            id="station-search"
+            placeholder="Search station, river basin, municipality…"
+            autocomplete="off"
+          />
+          <div class="search-results" id="search-results"></div>
+        </div>
+
+        <!-- Color Mode Switch -->
+        <div class="section-label">Visual Encoding</div>
+        <div class="segmented" role="group" aria-label="Color mode">
+          <button id="mode-pct" class="active">Percentile</button>
+          <button id="mode-abs">Volume (m³/s)</button>
+          <button id="mode-none">None</button>
+        </div>
+
+        <!-- Dynamic Legend -->
+        <div class="legend-box" id="legend-box">
+          <div class="legend-bar pct-gradient" id="legend-bar"></div>
+          <div class="legend-ticks" id="legend-ticks">
+            <span>p10 Dry</span>
+            <span>p50 Normal</span>
+            <span>p90 Flood</span>
+          </div>
+        </div>
+
+        <!-- Layer Toggles -->
+        <div class="section-label">Map Layers</div>
+        <div class="toggles">
+          <label class="toggle-row">
+            <input type="checkbox" id="toggle-anim" checked />
+            <span>Animate downstream flow</span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="toggle-stations" checked />
+            <span>Show SYKE gauging stations</span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="toggle-lakes" />
+            <span>Show lake through-flow centerlines</span>
+          </label>
+        </div>
+
+        <!-- Quick-Jump River Basins -->
+        <div class="section-label">Major River Systems</div>
+        <div class="chips" id="river-chips">
+          <button data-lon="24.55" data-lat="65.85" data-z="7.3">Kemijoki</button>
+          <button data-lon="24.16" data-lat="66.05" data-z="7.4">Tornionjoki</button>
+          <button data-lon="26.20" data-lat="64.75" data-z="7.6">Oulujoki</button>
+          <button data-lon="22.15" data-lat="61.38" data-z="7.8">Kokemäenjoki</button>
+          <button data-lon="26.85" data-lat="60.75" data-z="8.0">Kymijoki</button>
+          <button data-lon="28.78" data-lat="61.18" data-z="8.3">Vuoksi</button>
+          <button data-lon="22.25" data-lat="62.95" data-z="8.2">Kyrönjoki</button>
+          <button data-lon="27.02" data-lat="69.90" data-z="7.6">Tenojoki</button>
+        </div>
+
+        <div class="credits">
+          Data: <a href="https://www.syke.fi/avointieto" target="_blank" rel="noopener">SYKE</a> (Uoma10 &amp; Hydrologiarajapinta) &amp; MML · CC BY 4.0
+        </div>
+      </div>
+    </aside>
+
+    <!-- Hover Tooltip -->
+    <div id="hover-tooltip" class="hover-tooltip"></div>
+
+    <!-- Detail Drawer -->
+    <section class="detail-drawer" id="detail-drawer" aria-live="polite"></section>
+
+    <!-- Live Metrics & Hydrological Reporting Modal -->
+    <div class="modal-backdrop" id="metrics-modal" role="dialog" aria-modal="true" aria-labelledby="metrics-modal-title">
+      <div class="modal-card modal-wide">
+        <div class="modal-header">
+          <div>
+            <div class="eyebrow">VUOLAS · NATIONAL HYDROLOGICAL REPORT</div>
+            <h2 id="metrics-modal-title">Finland River Flow Metrics</h2>
+          </div>
+          <button class="icon-btn" id="btn-close-metrics" aria-label="Close metrics">×</button>
+        </div>
+        <div class="modal-body" id="metrics-body">
+          Loading live hydrological metrics…
+        </div>
+      </div>
+    </div>
+
+    <!-- Beginner's Guide & Hydrology Glossary Modal -->
+    <div class="modal-backdrop" id="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-modal-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="eyebrow">USER GUIDE &amp; HYDROLOGY GLOSSARY</div>
+            <h2 id="info-modal-title">How to Read Vuolas</h2>
+          </div>
+          <button class="icon-btn" id="btn-close-info" aria-label="Close guide">×</button>
+        </div>
+
+        <div class="modal-body">
+          <p class="guide-intro">
+            <strong>Vuolas</strong> (Finnish for <em>swift-flowing, abundant current</em>) visualizes live water flow across
+            <strong>42,578 Finnish river and lake segments</strong> using open data from the Finnish Environment Institute (<strong>SYKE</strong>).
+            You don't need a hydrology background—here is what every control and term means in plain language.
+          </p>
+
+          <h3>1. Visual Encoding Modes</h3>
+          <div class="guide-grid">
+            <div class="guide-item">
+              <div class="guide-term">Percentile (p1–p99) <span class="guide-tag">Best for beginners</span></div>
+              <p>
+                Compares each river to <strong>its own 15-year history</strong> rather than to other rivers. Why? Because
+                <code>20 m³/s</code> is a major flood in a small stream, yet unusually dry for a giant river like Kemijoki.
+              </p>
+              <ul>
+                <li><strong style="color:#f59e0b">p10 (Dry / Low):</strong> Lower flow than 90% of historical days.</li>
+                <li><strong style="color:#22d3ee">p50 (Normal / Median):</strong> Typical everyday water flow for that river.</li>
+                <li><strong style="color:#c084fc">p90+ (High / Flood):</strong> Wetter than 90% of days—top 10% highest flows.</li>
+              </ul>
+            </div>
+
+            <div class="guide-item">
+              <div class="guide-term">Volume (m³/s — Discharge)</div>
+              <p>
+                Shows the actual physical amount of water passing a point <strong>every second</strong> in cubic meters.
+                <code>1 m³/s = 1,000 liters per second</code> (roughly five full bathtubs passing every second). Thicker, brighter lines show Finland's biggest river trunks.
+              </p>
+            </div>
+
+            <div class="guide-item">
+              <div class="guide-term">None (Plain Map)</div>
+              <p>
+                Turns off all data-driven colors, outer glow, and thickness scaling so all rivers appear with clean, uniform lines—useful for studying river geography without visual clutter.
+              </p>
+            </div>
+          </div>
+
+          <h3>2. Top Summary Cards (National Overview)</h3>
+          <div class="guide-list">
+            <div><strong>Stations:</strong> Number of automated SYKE river stations reporting recent measurements across Finland.</div>
+            <div><strong>Median Pct:</strong> The nationwide "middle" river condition right now (around <code>p50</code> is average; <code>p80+</code> means rivers nationwide are running high).</div>
+            <div><strong>High (≥p85) &amp; Low (≤p15):</strong> Count of stations currently experiencing unusually high water vs. dry conditions.</div>
+          </div>
+
+          <h3>3. Map Layers &amp; Navigation</h3>
+          <div class="guide-list">
+            <div><strong>Animate downstream flow:</strong> Streams glowing droplets strictly downstream from upland headwaters toward the sea. In Percentile and Volume modes, droplets move faster and glow wider on higher-volume rivers.</div>
+            <div><strong>Show SYKE gauging stations:</strong> Toggles circular markers at the exact physical locations where sensors measure water levels and flow.</div>
+            <div><strong>Show lake through-flow centerlines:</strong> Unlike steep mountain countries, Finnish rivers constantly pass through thousands of lakes. By default, virtual connector lines inside lakes are hidden so lakes stay calm; enable this to trace unbroken water paths through lake chains.</div>
+            <div><strong>Search &amp; Major River Systems:</strong> Type any station, river basin, or municipality name to zoom straight to it, or use the quick-jump river buttons.</div>
+          </div>
+
+          <h3>4. Clicking a River: Hydrograph &amp; Key Terms</h3>
+          <div class="guide-list">
+            <div><span class="badge measured" style="margin:0 6px 0 0;">SYKE Gauging Station</span> Measured directly at an official sensor station (or along its main river corridor).</div>
+            <div><span class="badge estimated" style="margin:0 6px 0 0;">Catchment-Scaled Reach</span> Smaller tributaries don't all have sensors. Their flow is estimated from the nearest basin station's runoff (liters draining per km² of land per second) multiplied by the reach's upstream drainage area.</div>
+            <div><strong>Reach Area (km² — Drainage / Catchment Basin):</strong> Total land and lake surface area uphill that drains rainwater and snowmelt into that specific river stretch.</div>
+            <div><strong>7-Day Trend (%):</strong> Percentage change in flow compared to 7 days ago (<code>+</code> means rising water, <code>−</code> means receding water).</div>
+            <div><strong>30-Day Hydrograph Chart:</strong> The blue line plots the last 30 days of daily flow, the dashed horizontal line marks the 15-year normal median (<code>p50</code>), and the shaded band shows the normal <code>p10–p90</code> range.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

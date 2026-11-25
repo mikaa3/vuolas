@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+certs/syke_ca_bundle.pem
+data/raw/
+data/live/
+data/processed/rivers_wgs84.geojson*
+data/processed/finland_rivers.pmtiles
+nothing/
+.DS_Store
