@@ -36,15 +36,18 @@ let currentQExpr = 10;
 function buildStationExpressions(stations) {
   const runoffMatch = ["match", ["get", "station_id"]];
   const pctMatch = ["match", ["get", "station_id"]];
+  const qMatch = ["match", ["get", "station_id"]];
 
   for (const [pid, s] of Object.entries(stations)) {
     const idNum = Number(pid);
     runoffMatch.push(idNum, Math.max(Number(s.r) || 0.1, 0.05));
     pctMatch.push(idNum, Number(s.pct) || 50);
+    qMatch.push(idNum, Math.max(Number(s.q) || 0.1, 0.05));
   }
   runoffMatch.push(8.0);
   pctMatch.push(50);
-  return { runoffMatch, pctMatch };
+  qMatch.push(5.0);
+  return { runoffMatch, pctMatch, qMatch };
 }
 
 function makeWidthExpr(qExpr, scale = 1.0, minFloor = 0.55) {
@@ -429,9 +432,14 @@ map.on("load", async () => {
   document.getElementById("kpi-high").textContent = sum.high_flow_count ?? 0;
   document.getElementById("kpi-low").textContent = sum.low_flow_count ?? 0;
 
-  const { runoffMatch, pctMatch } = buildStationExpressions(flowData.stations);
+  const { runoffMatch, pctMatch, qMatch } = buildStationExpressions(flowData.stations);
   currentPctMatch = pctMatch;
-  currentQExpr = ["*", ["get", "area_km2"], ["/", runoffMatch, 1000]];
+  currentQExpr = [
+    "case",
+    ["==", ["get", "is_measured"], 1],
+    qMatch,
+    ["*", ["get", "area_km2"], ["/", runoffMatch, 1000]],
+  ];
 
   map.addSource("finland-rivers", {
     type: "vector",

@@ -180,38 +180,53 @@ def build_station_baselines() -> tuple[gpd.GeoDataFrame, dict[str, dict], dict[i
 def propagate_gauged_corridors(
     rivers: gpd.GeoDataFrame, direct_station_by_idx: dict[int, int]
 ) -> tuple[pd.Series, pd.Series]:
-    """Propagate directly measured station IDs along main-stem river corridors."""
+    """Propagate directly measured station IDs upstream & downstream along main-stem river channels."""
     out_edges: dict[int, list[int]] = defaultdict(list)
+    in_edges: dict[int, list[int]] = defaultdict(list)
     u_arr = rivers["uomapistei"].to_numpy()
     v_arr = rivers["uomapist00"].to_numpy()
     area_arr = rivers["area_km2"].to_numpy()
+    is_lake_arr = rivers["is_lake"].to_numpy()
     paareitti = pd.to_numeric(rivers["paareitti"], errors="coerce").fillna(1).astype(int).to_numpy()
 
-    for idx, u in enumerate(u_arr):
+    for idx, (u, v) in enumerate(zip(u_arr, v_arr)):
         out_edges[int(u)].append(idx)
+        in_edges[int(v)].append(idx)
 
     corridor_station = dict(direct_station_by_idx)
     is_measured = np.zeros(len(rivers), dtype=int)
     for idx in direct_station_by_idx:
         is_measured[idx] = 1
 
-    # Walk up to 25 topological steps downstream from each gauging station along main stem
+    # Walk downstream & upstream along the same river channel (stopping at lakes or major confluences)
     for start_idx, pid in direct_station_by_idx.items():
         start_area = max(area_arr[start_idx], 10.0)
+
+        # Downstream walk
         cur_node = int(v_arr[start_idx])
-        for _ in range(25):
-            candidates = [i for i in out_edges.get(cur_node, []) if paareitti[i] == 1]
+        for _ in range(30):
+            candidates = [i for i in out_edges.get(cur_node, []) if paareitti[i] == 1 and is_lake_arr[i] == 0]
             if not candidates:
                 break
             nxt_idx = max(candidates, key=lambda i: area_arr[i])
-            if nxt_idx in direct_station_by_idx:
-                break  # Reached next downstream gauging station!
-            # Stop propagating "measured" status if drainage area more than doubles (major confluence)
-            if area_arr[nxt_idx] > start_area * 2.2:
+            if nxt_idx in direct_station_by_idx or area_arr[nxt_idx] > start_area * 1.65:
                 break
             corridor_station[nxt_idx] = pid
             is_measured[nxt_idx] = 1
             cur_node = int(v_arr[nxt_idx])
+
+        # Upstream walk
+        cur_node = int(u_arr[start_idx])
+        for _ in range(20):
+            candidates = [i for i in in_edges.get(cur_node, []) if paareitti[i] == 1 and is_lake_arr[i] == 0]
+            if not candidates:
+                break
+            prv_idx = max(candidates, key=lambda i: area_arr[i])
+            if prv_idx in direct_station_by_idx or area_arr[prv_idx] < start_area * 0.60:
+                break
+            corridor_station[prv_idx] = pid
+            is_measured[prv_idx] = 1
+            cur_node = int(u_arr[prv_idx])
 
     return pd.Series(corridor_station), pd.Series(is_measured, index=rivers.index)
 
@@ -250,21 +265,35 @@ def main():
     print("3. Building SYKE Virtaama station baselines...")
     stations_gdf, stats_by_pid, basin_names = build_station_baselines()
 
-    print("4. Snapping stations to river reaches & assigning basin reference stations...")
-    river_channels = rivers[rivers["is_lake"] == 0][["uoma_id", "area_km2", "paavesisto", "geometry"]]
-    snapped = gpd.sjoin_nearest(
-        stations_gdf,
-        river_channels,
-        how="inner",
-        max_distance=600.0,
-        distance_col="snap_m",
-    ).sort_values("snap_m")
-    snapped = snapped.drop_duplicates(subset=["Paikka_Id"], keep="first")
+    print("4. Scale-aware station snapping & basin reference matching...")
+    # Estimate each station's true hydrological drainage area from 15y mean Q (~10 l/s/km² in Finland)
+    stations_gdf["expected_area"] = stations_gdf["Paikka_Id"].apply(
+        lambda pid: max(float(stats_by_pid[str(int(pid))]["mean_q"]) * 100.0, 15.0)
+    )
+
+    river_channels = rivers[rivers["is_lake"] == 0][["uoma_id", "area_km2", "paavesisto", "geometry"]].copy()
+    st_buffers = stations_gdf[["Paikka_Id", "expected_area", "H_PaaVesal_Id", "geometry"]].copy()
+    st_pts_geom = st_buffers.geometry.copy()
+    st_buffers["geometry"] = st_buffers.geometry.buffer(800.0)
+
+    cand = gpd.sjoin(st_buffers, river_channels, how="inner", predicate="intersects")
+    cand["st_pt"] = cand["Paikka_Id"].map(dict(zip(stations_gdf["Paikka_Id"], st_pts_geom)))
+    cand["reach_geom"] = cand["index_right"].map(river_channels.geometry)
+    cand["snap_m"] = [pt.distance(rg) for pt, rg in zip(cand["st_pt"], cand["reach_geom"])]
+    cand["log_area_diff"] = np.abs(np.log10(np.maximum(cand["area_km2"], 10.0) / cand["expected_area"]))
+    cand["basin_pen"] = np.where(cand["H_PaaVesal_Id"] == cand["paavesisto"], 0.0, 2.5)
+    # Prefer river reach matching the station's hydrological scale rather than tiny side ditches
+    cand["snap_score"] = (cand["snap_m"] / 200.0) + 4.0 * cand["log_area_diff"] + cand["basin_pen"]
+
+    best_cand = cand.sort_values("snap_score").drop_duplicates(subset=["Paikka_Id"], keep="first")
+    snapped = stations_gdf.merge(
+        best_cand[["Paikka_Id", "uoma_id", "area_km2", "snap_m"]], on="Paikka_Id", how="inner"
+    )
 
     # Map river row index -> directly snapped station
     uoma_to_row = dict(zip(rivers["uoma_id"], rivers.index))
     direct_by_row: dict[int, int] = {}
-    for _, srow in snapped.sort_values("area_km2", ascending=False).iterrows():
+    for _, srow in snapped.sort_values("expected_area", ascending=False).iterrows():
         ridx = uoma_to_row[int(srow["uoma_id"])]
         direct_by_row[ridx] = int(srow["Paikka_Id"])
 
@@ -272,40 +301,46 @@ def main():
     rivers["is_measured"] = measured_series
     rivers["station_id"] = rivers.index.map(corridor_series)
 
-    # For remaining ungauged reaches, match nearest station within same major basin (fallback: nearest overall)
-    snapped_pts = snapped[["Paikka_Id", "H_PaaVesal_Id", "area_km2", "geometry"]].copy()
-    missing_mask = rivers["station_id"].isna()
-    nearest_global = gpd.sjoin_nearest(
-        rivers.loc[missing_mask, ["uoma_id", "paavesisto", "geometry"]],
-        snapped_pts[["Paikka_Id", "geometry"]],
-        how="left",
-    ).drop_duplicates("uoma_id")
-    fallback_map = dict(zip(nearest_global["uoma_id"], nearest_global["Paikka_Id"]))
+    # Match ungauged reaches by combined spatial distance + drainage-scale similarity (prevents giant lakes matching tiny creeks)
+    missing_df = rivers.loc[rivers["station_id"].isna(), ["uoma_id", "area_km2", "paavesisto", "geometry"]].copy()
+    rep_pts = missing_df.geometry.representative_point()
+    rx = rep_pts.x.to_numpy()
+    ry = rep_pts.y.to_numpy()
+    r_log_a = np.log10(np.maximum(missing_df["area_km2"].to_numpy(), 10.0))
+    r_basin = missing_df["paavesisto"].fillna(-1).astype(int).to_numpy()
 
-    # Basin-aware nearest match where major basin has >= 1 snapped station
-    basin_matched: dict[int, int] = {}
-    for basin_id, b_rivers in rivers.loc[missing_mask, ["uoma_id", "paavesisto", "geometry"]].groupby("paavesisto"):
-        b_stations = snapped_pts[snapped_pts["H_PaaVesal_Id"] == basin_id]
-        if len(b_stations) > 0:
-            joined = gpd.sjoin_nearest(b_rivers, b_stations[["Paikka_Id", "geometry"]], how="left").drop_duplicates("uoma_id")
-            basin_matched.update(dict(zip(joined["uoma_id"], joined["Paikka_Id"])))
+    sx = snapped.geometry.x.to_numpy()
+    sy = snapped.geometry.y.to_numpy()
+    s_pids = snapped["Paikka_Id"].astype(int).to_numpy()
+    s_basin = snapped["H_PaaVesal_Id"].fillna(-2).astype(int).to_numpy()
+    # Effective hydrological area accounts for cross-border upstream catchments (e.g. Lieksanjoki, Tornionjoki)
+    s_eff_area = np.maximum(snapped["area_km2"].to_numpy(), snapped["expected_area"].to_numpy() * 0.85)
+    s_log_a = np.log10(np.maximum(s_eff_area, 10.0))
 
-    def resolve_station(row) -> int:
-        if pd.notna(row["station_id"]):
-            return int(row["station_id"])
-        uid = int(row["uoma_id"])
-        return int(basin_matched.get(uid) or fallback_map.get(uid))
+    matched_pids = np.empty(len(missing_df), dtype=int)
+    for i in range(len(missing_df)):
+        same_b = np.where(s_basin == r_basin[i])[0]
+        idxs = same_b if len(same_b) > 0 else np.arange(len(s_pids))
+        dist_km = np.hypot(rx[i] - sx[idxs], ry[i] - sy[idxs]) / 1000.0
+        scale_pen = 45.0 * np.abs(r_log_a[i] - s_log_a[idxs])
+        best_j = idxs[int(np.argmin(dist_km + scale_pen))]
+        matched_pids[i] = s_pids[best_j]
 
-    rivers["station_id"] = rivers.apply(resolve_station, axis=1)
+    matched_map = dict(zip(missing_df["uoma_id"].astype(int), matched_pids))
+    rivers["station_id"] = [
+        int(sid) if pd.notna(sid) else int(matched_map[int(uid)])
+        for sid, uid in zip(rivers["station_id"], rivers["uoma_id"])
+    ]
 
-    # Save enriched stations_baseline.json (with WGS84 coords + snapped drainage area)
+    # Save enriched stations_baseline.json (with calibrated effective drainage area)
     snapped_wgs = snapped.to_crs("EPSG:4326")
     baseline_out: dict[str, dict] = {}
     for _, row in snapped_wgs.iterrows():
         pid_str = str(int(row["Paikka_Id"]))
         st_stats = stats_by_pid[pid_str]
-        # Calibrate station reference area so Q = area_km2 * runoff / 1000 matches measured Q at the gauge!
-        snapped_area = max(float(row["area_km2"]), 10.0)
+        # Calibrate effective area using both Uoma10 graph area and climatological mean_q (~10.5 l/s/km² max long-term mean)
+        clim_min_area = float(st_stats["mean_q"]) * 95.0
+        calibrated_area = max(float(row["area_km2"]), clim_min_area, 12.0)
         baseline_out[pid_str] = {
             "name": str(row["Nimi"]).strip(),
             "municipality": str(row.get("KuntaNimi") or "").strip(),
@@ -313,7 +348,7 @@ def main():
             "sub_basin": str(row.get("VesalNimi") or "").strip(),
             "lon": round(float(row.geometry.x), 5),
             "lat": round(float(row.geometry.y), 5),
-            "area_km2": round(snapped_area, 1),
+            "area_km2": round(calibrated_area, 1),
             **st_stats,
         }
 

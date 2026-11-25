@@ -71,9 +71,11 @@ def main():
             latest_obs_date = obs_time
 
         pct = compute_percentile(q_now, meta["percentiles"])
-        area_km2 = max(float(meta["area_km2"]), 10.0)
-        # Calibrated specific runoff l/s/km² so Q_reach = reach_area * r / 1000 equals q_now at the station!
-        runoff_l_s_km2 = round((q_now * 1000.0) / area_km2, 3)
+        # Ensure effective drainage area respects climatological mean runoff (~10.5 l/s/km² ceiling)
+        clim_area = float(meta.get("mean_q", 0.0)) * 95.0
+        area_km2 = max(float(meta["area_km2"]), clim_area, 12.0)
+        # Bound instantaneous specific runoff for ungauged scaling to realistic Finnish range [0.1, 60.0] l/s/km²
+        runoff_l_s_km2 = round(float(np.clip((q_now * 1000.0) / area_km2, 0.1, 60.0)), 3)
 
         # 7-day trend delta
         q_7d_ago = float(grp_sorted.iloc[max(0, len(grp_sorted) - 8)]["Arvo"])
