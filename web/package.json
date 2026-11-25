@@ -9,8 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "maplibre-gl": "^4.7.1",
-    "pmtiles": "^3.2.0"
+    "maplibre-gl": "^4.7.1"
   },
   "devDependencies": {
     "vite": "^6.0.0"

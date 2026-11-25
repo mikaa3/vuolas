@@ -25,15 +25,14 @@ cp data/live/*.json web/public/data/
 cd web && npm run dev
 ```
 
-To rebuild the nationwide `finland_rivers.pmtiles` and 15-year station baseline from scratch:
+To rebuild the nationwide static vector tiles (`web/public/data/tiles/`) and 15-year station baseline from scratch:
 
 ```bash
 uv run python scripts/build_network.py
-tippecanoe -P -o data/processed/finland_rivers.pmtiles -l rivers -Z 4 -z 12 \
-  --no-feature-limit --no-tile-size-limit --force data/processed/rivers_wgs84.geojsonl
-cp data/processed/finland_rivers.pmtiles web/public/data/
+tippecanoe -P -e web/public/data/tiles -l rivers -Z 4 -z 10 \
+  --no-tile-compression --no-feature-limit --no-tile-size-limit --force data/processed/rivers_wgs84.geojsonl
 ```
 
 ## Deployment (GitHub + Cloudflare Pages — \$0/month, No Credit Card)
-1. **Static Frontend & `PMTiles`:** Hosted on **Cloudflare Pages** (root directory: `web`, build command: `npm run build`, output: `dist`), serving both the UI and `finland_rivers.pmtiles` (19.65 MiB) directly from Cloudflare's edge.
+1. **Static Frontend & Vector Tiles:** Hosted on **Cloudflare Pages** (root directory: `web`, build command: `npm run build`, output: `dist`), serving both the UI and pre-cut `.pbf` vector tiles directly from Cloudflare's edge with HTTP/3 and Brotli compression.
 2. **Hourly Live SYKE Data:** `.github/workflows/update-flows.yml` runs hourly on GitHub Actions and publishes `latest_flows.json` and `station_series.json` to an orphan single-commit `live-data` branch. Set `VITE_FLOWS_BASE_URL=https://raw.githubusercontent.com/<USER>/<REPO>/live-data` in Cloudflare Pages environment variables.

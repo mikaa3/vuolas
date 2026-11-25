@@ -1,5 +1,4 @@
 import maplibregl from "maplibre-gl";
-import { Protocol } from "pmtiles";
 
 function resolveBaseUrl(raw) {
   const trimmed = (raw || "/data").replace(/\/$/, "");
@@ -8,11 +7,8 @@ function resolveBaseUrl(raw) {
     : new URL(trimmed, window.location.origin).href.replace(/\/$/, "");
 }
 
-const TILES_BASE = resolveBaseUrl(import.meta.env.VITE_TILES_BASE_URL || import.meta.env.VITE_DATA_BASE_URL || "/data");
+const TILES_BASE = resolveBaseUrl(import.meta.env.VITE_TILES_BASE_URL || "/data");
 const FLOWS_BASE = resolveBaseUrl(import.meta.env.VITE_FLOWS_BASE_URL || import.meta.env.VITE_DATA_BASE_URL || "/data");
-
-const protocol = new Protocol();
-maplibregl.addProtocol("pmtiles", protocol.tile);
 
 const map = new maplibregl.Map({
   container: "map",
@@ -439,7 +435,10 @@ map.on("load", async () => {
 
   map.addSource("finland-rivers", {
     type: "vector",
-    url: `pmtiles://${TILES_BASE}/finland_rivers.pmtiles`,
+    tiles: [`${TILES_BASE}/tiles/{z}/{x}/{y}.pbf`],
+    minzoom: 4,
+    maxzoom: 10,
+    bounds: [19.6, 59.83, 34.68, 70.5],
     attribution: "SYKE & MML (CC BY 4.0)",
   });
 
