@@ -47,5 +47,8 @@ tippecanoe -P -e web/public/data/tiles -l rivers -Z 4 -z 10 \
   --no-tile-compression --no-feature-limit --no-tile-size-limit --force data/processed/rivers_wgs84.geojsonl
 ```
 
-## Attribution & License
-Hydrological observations and river network topology by **Suomen ympäristökeskus (SYKE)** and **Maanmittauslaitos (MML)** under **CC BY 4.0**. Basemap vector tiles by **OpenFreeMap** (OpenStreetMap contributors).
+## License & Data Attribution
+
+- **Source Code:** Copyright © 2026 Mika Äijö. Licensed under the **GNU Affero General Public License v3.0 (`AGPL-3.0-or-later`)** — see [LICENSE](LICENSE). Any modified version operated as a public network service must make its complete corresponding source code available under AGPLv3.
+- **Hydrological & Spatial Data:** Bundled datasets in `data/` and `web/public/data/` are derived from **Suomen ympäristökeskus (SYKE)** and **Maanmittauslaitos (MML)** and remain licensed under **Creative Commons Attribution 4.0 ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))**. Basemap vector tiles by **OpenFreeMap** (© OpenStreetMap contributors, ODbL).
+- **Disclaimer:** Provided *as is* for informational visualization only; always consult official [Vesi.fi / Flood Centre](https://www.vesi.fi/) warnings for safety decisions.
