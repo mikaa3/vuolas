@@ -20,7 +20,7 @@ const map = new maplibregl.Map({
   attributionControl: false,
 });
 
-map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
 
 let flowData = null;
