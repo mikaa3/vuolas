@@ -615,11 +615,32 @@ function setupUIControls() {
 
   btnInfo.addEventListener("click", () => {
     metricsModal.classList.remove("open");
+    if (flowData) {
+      document.getElementById("arch-live-sync").textContent =
+        `Live feed synced: ${flowData.updated_at} · ${flowData.station_count} active SYKE stations`;
+    }
     infoModal.classList.add("open");
   });
   btnCloseInfo.addEventListener("click", () => infoModal.classList.remove("open"));
   infoModal.addEventListener("click", (e) => {
     if (e.target === infoModal) infoModal.classList.remove("open");
+  });
+
+  const tabGuide = document.getElementById("tab-guide");
+  const tabArch = document.getElementById("tab-arch");
+  const paneGuide = document.getElementById("pane-guide");
+  const paneArch = document.getElementById("pane-arch");
+  tabGuide.addEventListener("click", () => {
+    tabGuide.classList.add("active");
+    tabArch.classList.remove("active");
+    paneGuide.style.display = "block";
+    paneArch.style.display = "none";
+  });
+  tabArch.addEventListener("click", () => {
+    tabArch.classList.add("active");
+    tabGuide.classList.remove("active");
+    paneArch.style.display = "block";
+    paneGuide.style.display = "none";
   });
 
   btnMetrics.addEventListener("click", async () => {

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vuolas — System Architecture &amp; Data Flow</title>
+    <style>
+      :root {
+        --bg: #060a12;
+        --card: #0e1625;
+        --border: rgba(148, 163, 184, 0.18);
+        --text: #f1f5f9;
+        --muted: #94a3b8;
+        --cyan: #38bdf8;
+        --purple: #c084fc;
+        --amber: #fbbf24;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: radial-gradient(circle at 20% 0%, #0f1d35 0%, var(--bg) 60%);
+        color: var(--text);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        padding: 32px 20px 56px;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; }
+      header {
+        display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+        gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 22px;
+      }
+      .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--cyan); }
+      h1 { font-size: 24px; font-weight: 700; margin-top: 2px; }
+      .back-link {
+        text-decoration: none; color: var(--text); font-size: 13px; font-weight: 600;
+        padding: 8px 14px; border-radius: 9px; background: rgba(56, 189, 248, 0.14);
+        border: 1px solid rgba(56, 189, 248, 0.35); transition: all 0.15s ease;
+      }
+      .back-link:hover { background: rgba(56, 189, 248, 0.28); }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; align-items: center; }
+      .tab {
+        padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border);
+        background: var(--card); color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer;
+      }
+      .tab.active { background: #0284c7; border-color: var(--cyan); color: #fff; }
+      .stage { position: relative; padding: 10px 0; }
+      #edges-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+      .cols { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 38px; }
+      .col { display: flex; flex-direction: column; gap: 14px; }
+      .col-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+      .node {
+        background: rgba(14, 22, 37, 0.92); border: 1px solid var(--border); border-radius: 12px;
+        padding: 14px 15px; cursor: pointer; transition: transform 0.15s ease, opacity 0.2s ease, border-color 0.15s ease;
+      }
+      .node:hover { transform: translateY(-2px); border-color: rgba(56, 189, 248, 0.5); }
+      .node.selected { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+      .node.dim { opacity: 0.22; }
+      .node-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+      .node-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+      .node-tag { display: inline-block; margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--cyan); }
+      @keyframes dash { to { stroke-dashoffset: -24; } }
+      .edge { stroke-dasharray: 6 6; animation: dash 1.1s linear infinite; transition: opacity 0.2s ease; }
+      .edge.dim { opacity: 0.12; animation: none; }
+      .inspector {
+        margin-top: 22px; background: var(--card); border: 1px solid var(--border);
+        border-radius: 12px; padding: 16px 20px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;
+      }
+      .insp-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+      .insp-desc { font-size: 13px; color: #cbd5e1; max-width: 720px; line-height: 1.5; }
+      .insp-meta { font-family: ui-monospace, monospace; font-size: 12px; color: var(--amber); align-self: center; }
+      .artifacts {
+        margin-top: 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+      }
+      .art-card { background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+      .art-name { font-family: ui-monospace, monospace; font-size: 12px; color: var(--cyan); font-weight: 600; }
+      .art-info { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+      @media (max-width: 780px) {
+        .cols { grid-template-columns: 1fr; gap: 18px; }
+        #edges-svg { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <div class="eyebrow">VUOLAS · TECHNICAL ARCHITECTURE</div>
+          <h1>Zero-Backend River Flow Pipeline</h1>
+        </div>
+        <a href="/" class="back-link">← Back to Live Map</a>
+      </header>
+
+      <div class="toolbar">
+        <button class="tab active" data-pipe="all">All Pipelines</button>
+        <button class="tab" data-pipe="gis">1. One-Time GIS Build</button>
+        <button class="tab" data-pipe="cron">2. Hourly SYKE Sync</button>
+        <button class="tab" data-pipe="runtime">3. Browser Runtime</button>
+        <span style="margin-left:auto;font-size:12px;color:var(--muted);">Click any node to inspect payload &amp; files</span>
+      </div>
+
+      <div class="stage" id="stage">
+        <svg id="edges-svg"></svg>
+        <div class="cols">
+          <div class="col">
+            <div class="col-title">1. Open Data Sources</div>
+            <div class="node" id="n-uoma" data-pipes="gis">
+              <div class="node-title">SYKE Uomaverkosto</div>
+              <div class="node-sub">National directed river &amp; lake-route graph (`Uoma10` + `Uomasolmupisteet`) in EPSG:3067.</div>
+              <span class="node-tag">42,578 reaches · CC BY 4.0</span>
+            </div>
+            <div class="node" id="n-odata" data-pipes="gis,cron">
+              <div class="node-title">SYKE Hydrologiarajapinta</div>
+              <div class="node-sub">Keyless OData v1.1 REST API supplying station coordinates and `Virtaama` (`m³/s`).</div>
+              <span class="node-tag" style="color:var(--purple)">~420 active stations</span>
+            </div>
+            <div class="node" id="n-ofm" data-pipes="runtime">
+              <div class="node-title">OpenFreeMap Vector CDN</div>
+              <div class="node-sub">Keyless public OpenStreetMap vector basemap styled with muted transportation layers.</div>
+              <span class="node-tag">tiles.openfreemap.org</span>
+            </div>
+          </div>
+
+          <div class="col">
+            <div class="col-title">2. Build &amp; Serverless Edge</div>
+            <div class="node" id="n-prep" data-pipes="gis">
+              <div class="node-title">Offline GIS + Tippecanoe</div>
+              <div class="node-sub">Accumulates topological drainage area (`km²`), 15y percentiles, and cuts `z4–z10` `.pbf` tiles.</div>
+              <span class="node-tag" style="color:var(--amber)">scripts/build_network.py</span>
+            </div>
+            <div class="node selected" id="n-cf" data-pipes="gis,runtime">
+              <div class="node-title">Cloudflare Pages Edge</div>
+              <div class="node-sub">Serves Vite SPA and 2,110 pre-cut `.pbf` river tiles over HTTP/3 with Brotli edge compression.</div>
+              <span class="node-tag">vuolas.pages.dev · $0/mo</span>
+            </div>
+            <div class="node" id="n-gha" data-pipes="cron,runtime">
+              <div class="node-title">GitHub Action → live-data</div>
+              <div class="node-sub">Runs hourly at `:14`, force-pushing a single-commit orphan branch served via Fastly CORS CDN.</div>
+              <span class="node-tag" style="color:var(--purple)">update-flows.yml · 0 DB</span>
+            </div>
+          </div>
+
+          <div class="col">
+            <div class="col-title">3. Browser Client Runtime</div>
+            <div class="node" id="n-maplibre" data-pipes="runtime">
+              <div class="node-title">MapLibre WebGL Join</div>
+              <div class="node-sub">Joins live station runoff (`l/s/km²`) &amp; percentiles onto vector tiles via `station_id` expressions.</div>
+              <span class="node-tag">Q = Area × Runoff / 1000</span>
+            </div>
+            <div class="node" id="n-canvas" data-pipes="runtime">
+              <div class="node-title">60 FPS Flow-Comet Canvas</div>
+              <div class="node-sub">Projects visible rivers once per camera move into `Float32Array` paths and streams droplets downstream.</div>
+              <span class="node-tag">0 map.project() / frame</span>
+            </div>
+            <div class="node" id="n-ui" data-pipes="runtime">
+              <div class="node-title">Hydrographs &amp; Metrics UI</div>
+              <div class="node-sub">Lazy-loads 30-day station series on click or Metrics open to render SVG charts &amp; basin rankings.</div>
+              <span class="node-tag" style="color:var(--purple)">station_series.json · 251 KB</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="inspector">
+        <div>
+          <div class="insp-title" id="insp-title">Cloudflare Pages Static Edge</div>
+          <div class="insp-desc" id="insp-desc">Hosts the compiled Vite frontend (~230 KB gzipped), 404.html, _headers, and 2,110 uncompressed .pbf vector tiles (~6 MB Brotli-compressed on Cloudflare's edge)—requiring zero R2 object storage or credit card.</div>
+        </div>
+        <div class="insp-meta" id="insp-meta">web/dist · Unlimited static bandwidth</div>
+      </div>
+
+      <div class="artifacts">
+        <div class="art-card">
+          <div class="art-name">/data/tiles/{z}/{x}/{y}.pbf</div>
+          <div class="art-info">2,110 static vector tiles (`z4–z10`, overzoomed to `z13+`). Carries `uoma_id`, `area_km2`, `is_lake`, `is_measured`, `station_id`.</div>
+        </div>
+        <div class="art-card">
+          <div class="art-name">stations_baseline.json (168 KB)</div>
+          <div class="art-info">Calibrated station coordinates, basin names, snapped drainage areas, and 15-year empirical `p5–p95` thresholds.</div>
+        </div>
+        <div class="art-card">
+          <div class="art-name">latest_flows.json (~90 KB)</div>
+          <div class="art-info">Updated hourly on `live-data`. Holds current `Q` (`m³/s`), `pct` (`1–99`), runoff `r` (`l/s/km²`), and 7-day trend `%`.</div>
+        </div>
+        <div class="art-card">
+          <div class="art-name">station_series.json (~251 KB)</div>
+          <div class="art-info">Lazy-loaded 30-day daily discharge arrays powering station click hydrographs and the national Metrics report.</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const INFO = {
+        "n-uoma": ["SYKE Uomaverkosto (Uoma10 & Solmupisteet)", "Topologically connected river network (25,504 river channels where uomaluokka=1, and 17,074 virtual lake connectors where uomaluokka=2) with junction elevations confirming downstream orientation.", "71.5 MB raw Shapefile · EPSG:3067"],
+        "n-odata": ["SYKE Hydrologiarajapinta (OData v1.1)", "Public REST/OData hydrological database queried with a custom HARICA/GÉANT intermediate CA bundle so automated Python jobs verify TLS cleanly.", "rajapinnat.ymparisto.fi · Keyless"],
+        "n-ofm": ["OpenFreeMap Vector Tiles", "Free OpenStreetMap vector tile service requiring no API keys or accounts, customized at runtime to dim road clutter.", "HTTPS Vector Tiles · Global CDN"],
+        "n-prep": ["Offline GIS & Baseline Builder", "Runs Kahn's topological accumulation on the river graph to estimate upstream drainage area (km²), snaps gauges within 600 m, propagates main stems, and cuts static .pbf tiles.", "scripts/build_network.py · ~11s"],
+        "n-cf": ["Cloudflare Pages Static Edge", "Hosts the compiled Vite frontend (~230 KB gzipped), 404.html, _headers, and 2,110 pre-cut .pbf vector tiles (~6 MB Brotli-compressed)—requiring zero R2 or credit card.", "web/dist · Unlimited static bandwidth"],
+        "n-gha": ["Hourly GitHub Action → Orphan live-data Branch", "Executes scripts/fetch_live_flows.py every hour at :14 and force-pushes a single commit to live-data so repository history stays ~340 KB forever.", ".github/workflows/update-flows.yml"],
+        "n-maplibre": ["MapLibre GL JS Dynamic Join Engine", "Evaluates live discharge Q = area_km2 * runoff / 1000 on the GPU across all 42,578 segments without regenerating vector tiles when flows change.", "web/src/main.js · WebGL"],
+        "n-canvas": ["60 FPS Flow-Comet Canvas", "Caches screen-projected river coordinates on moveend/idle and renders tapered downstream droplets scaled logarithmically by discharge volume.", "#flow-canvas · HiDPI 2D Context"],
+        "n-ui": ["Hydrographs, Metrics & Beginner Guide", "Renders 30-day station SVG hydrographs (with p10–p90 reference bands), national watershed leaderboards, and plain-language hydrology docs.", "Zero external chart libraries"]
+      };
+      const EDGES = [
+        ["n-uoma", "n-prep", "gis", "#fbbf24"],
+        ["n-odata", "n-prep", "gis", "#fbbf24"],
+        ["n-prep", "n-cf", "gis", "#fbbf24"],
+        ["n-odata", "n-gha", "cron", "#c084fc"],
+        ["n-cf", "n-maplibre", "runtime", "#38bdf8"],
+        ["n-ofm", "n-maplibre", "runtime", "#38bdf8"],
+        ["n-gha", "n-maplibre", "runtime", "#c084fc"],
+        ["n-gha", "n-ui", "runtime", "#c084fc"],
+        ["n-maplibre", "n-canvas", "runtime", "#38bdf8"]
+      ];
+      let activePipe = "all", selected = "n-cf";
+      function draw() {
+        const stage = document.getElementById("stage"), svg = document.getElementById("edges-svg");
+        const sr = stage.getBoundingClientRect();
+        svg.setAttribute("viewBox", `0 0 ${sr.width} ${sr.height}`);
+        svg.innerHTML = EDGES.map(([f, t, p, col]) => {
+          const a = document.getElementById(f).getBoundingClientRect();
+          const b = document.getElementById(t).getBoundingClientRect();
+          const same = Math.abs(a.left - b.left) < 25;
+          let d;
+          if (same) {
+            const x = a.left + a.width / 2 - sr.left;
+            d = `M ${x} ${(a.top < b.top ? a.bottom : a.top) - sr.top} L ${x} ${(a.top < b.top ? b.top : b.bottom) - sr.top}`;
+          } else {
+            const x1 = a.right - sr.left, y1 = a.top + a.height / 2 - sr.top;
+            const x2 = b.left - sr.left, y2 = b.top + b.height / 2 - sr.top;
+            const dx = Math.max(24, (x2 - x1) * 0.48);
+            d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+          }
+          const ok = (activePipe === "all" || activePipe === p) && (!selected || activePipe !== "all" || f === selected || t === selected);
+          return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${selected && (f===selected||t===selected) ? 2.5 : 1.8}" class="edge ${ok ? "" : "dim"}"/>`;
+        }).join("");
+      }
+      function sync() {
+        document.querySelectorAll(".node").forEach((el) => {
+          const vis = activePipe === "all" || el.dataset.pipes.split(",").includes(activePipe);
+          el.classList.toggle("dim", !vis);
+          el.classList.toggle("selected", el.id === selected);
+        });
+        if (selected && INFO[selected]) {
+          document.getElementById("insp-title").textContent = INFO[selected][0];
+          document.getElementById("insp-desc").textContent = INFO[selected][1];
+          document.getElementById("insp-meta").textContent = INFO[selected][2];
+        }
+        draw();
+      }
+      document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => {
+        activePipe = btn.dataset.pipe; selected = null;
+        document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
+        sync();
+      }));
+      document.querySelectorAll(".node").forEach((el) => el.addEventListener("click", () => {
+        selected = selected === el.id ? null : el.id; sync();
+      }));
+      window.addEventListener("resize", draw);
+      requestAnimationFrame(sync);
+    </script>
+  </body>
+</html>
