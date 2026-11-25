@@ -27,7 +27,7 @@ let flowData = null;
 let seriesCache = null;
 let colorMode = "pct";
 let animEnabled = true;
-let showLakes = false;
+let showLakes = true;
 let currentPctMatch = 50;
 let currentQExpr = 10;
 
