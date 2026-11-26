@@ -1866,7 +1866,7 @@
     "sub_basin": "Kymijoen suuhaarojen a",
     "lon": 26.53324,
     "lat": 60.50213,
-    "area_km2": 5684.7,
+    "area_km2": 753.4,
     "mean_q": 7.93,
     "max_q": 59.1,
     "percentiles": {
@@ -5046,7 +5046,7 @@
     "sub_basin": "Lokan tekojärven la (bif.)",
     "lon": 27.74386,
     "lat": 67.8219,
-    "area_km2": 2218.5,
+    "area_km2": 246.0,
     "mean_q": 2.59,
     "max_q": 6.0,
     "percentiles": {
@@ -6526,7 +6526,7 @@
     "sub_basin": "Kymijoen suuhaarojen a",
     "lon": 26.86032,
     "lat": 60.52067,
-    "area_km2": 4267.7,
+    "area_km2": 54.1,
     "mean_q": 0.57,
     "max_q": 0.7,
     "percentiles": {
@@ -6586,7 +6586,7 @@
     "sub_basin": "Kymijoen suuhaarojen a",
     "lon": 26.5024,
     "lat": 60.53805,
-    "area_km2": 18096.9,
+    "area_km2": 1645.4,
     "mean_q": 17.32,
     "max_q": 109.9,
     "percentiles": {
@@ -6646,7 +6646,7 @@
     "sub_basin": "Uljuan a",
     "lon": 26.15551,
     "lat": 64.30356,
-    "area_km2": 271.9,
+    "area_km2": 135.8,
     "mean_q": 1.43,
     "max_q": 86.38,
     "percentiles": {
@@ -7026,7 +7026,7 @@
     "sub_basin": "Paasilan a",
     "lon": 23.4201,
     "lat": 63.69223,
-    "area_km2": 2382.3,
+    "area_km2": 549.1,
     "mean_q": 5.78,
     "max_q": 182.19,
     "percentiles": {
@@ -7086,7 +7086,7 @@
     "sub_basin": "Kallaveden a",
     "lon": 27.77326,
     "lat": 62.54819,
-    "area_km2": 8130.1,
+    "area_km2": 121.6,
     "mean_q": 1.28,
     "max_q": 76.56,
     "percentiles": {
@@ -7506,7 +7506,7 @@
     "sub_basin": "Kallaveden a",
     "lon": 27.76958,
     "lat": 62.54882,
-    "area_km2": 8130.1,
+    "area_km2": 1114.4,
     "mean_q": 11.73,
     "max_q": 71.04,
     "percentiles": {
@@ -7726,7 +7726,7 @@
     "sub_basin": "Miestämän - Vesijaon a (teor.)",
     "lon": 25.18399,
     "lat": 61.38648,
-    "area_km2": 85.5,
+    "area_km2": 35.1,
     "mean_q": 0.37,
     "max_q": 0.7,
     "percentiles": {
@@ -7966,7 +7966,7 @@
     "sub_basin": "Jääskänjärven - Allasjoen va",
     "lon": 23.25871,
     "lat": 62.61862,
-    "area_km2": 182.9,
+    "area_km2": 21.9,
     "mean_q": 0.23,
     "max_q": 0.86,
     "percentiles": {
@@ -8006,7 +8006,7 @@
     "sub_basin": "Seinäjoen suuosan, Kyrkösjärven a (bif.",
     "lon": 22.83674,
     "lat": 62.69835,
-    "area_km2": 192.9,
+    "area_km2": 35.1,
     "mean_q": 0.37,
     "max_q": 1.89,
     "percentiles": {
@@ -8046,7 +8046,7 @@
     "sub_basin": "Kirkkojärven la",
     "lon": 23.29174,
     "lat": 60.18091,
-    "area_km2": 624.5,
+    "area_km2": 18.1,
     "mean_q": 0.19,
     "max_q": 0.41,
     "percentiles": {
@@ -8066,7 +8066,7 @@
     "sub_basin": "Paasilan a",
     "lon": 23.42383,
     "lat": 63.69271,
-    "area_km2": 2382.3,
+    "area_km2": 114.0,
     "mean_q": 1.2,
     "max_q": 41.84,
     "percentiles": {

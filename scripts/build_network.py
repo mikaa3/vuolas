@@ -290,10 +290,22 @@ def main():
         best_cand[["Paikka_Id", "uoma_id", "area_km2", "snap_m"]], on="Paikka_Id", how="inner"
     )
 
-    # Map river row index -> directly snapped station
+    # Identify auxiliary bypass/fishway/canal gauges or severe underscale snaps (e.g. Pihkoo 0.5 m³/s next to 53 m³/s Koivukoski)
+    aux_keywords = ("kalatie", "laivakanava", "ohijuoksutus", "lisävesitys")
+    snapped["is_auxiliary"] = [
+        any(k in str(name).lower() for k in aux_keywords) or (float(r_area) > float(exp_a) * 4.0)
+        for name, r_area, exp_a in zip(snapped["Nimi"], snapped["area_km2"], snapped["expected_area"])
+    ]
+    print(
+        f"   Keeping all {len(snapped)} stations visible; excluding {int(snapped['is_auxiliary'].sum())} "
+        f"auxiliary/bypass gauges from overriding main-river segments."
+    )
+
+    # Map river row index -> directly snapped main-stem station (ascending so larger rivers win ties on same reach)
+    river_gauges = snapped[~snapped["is_auxiliary"]].copy()
     uoma_to_row = dict(zip(rivers["uoma_id"], rivers.index))
     direct_by_row: dict[int, int] = {}
-    for _, srow in snapped.sort_values("expected_area", ascending=False).iterrows():
+    for _, srow in river_gauges.sort_values("expected_area", ascending=True).iterrows():
         ridx = uoma_to_row[int(srow["uoma_id"])]
         direct_by_row[ridx] = int(srow["Paikka_Id"])
 
@@ -301,7 +313,7 @@ def main():
     rivers["is_measured"] = measured_series
     rivers["station_id"] = rivers.index.map(corridor_series)
 
-    # Match ungauged reaches by combined spatial distance + drainage-scale similarity (prevents giant lakes matching tiny creeks)
+    # Match ungauged reaches using non-auxiliary river gauges (prevents canals/fishways/sluices skewing river reaches)
     missing_df = rivers.loc[rivers["station_id"].isna(), ["uoma_id", "area_km2", "paavesisto", "geometry"]].copy()
     rep_pts = missing_df.geometry.representative_point()
     rx = rep_pts.x.to_numpy()
@@ -309,12 +321,12 @@ def main():
     r_log_a = np.log10(np.maximum(missing_df["area_km2"].to_numpy(), 10.0))
     r_basin = missing_df["paavesisto"].fillna(-1).astype(int).to_numpy()
 
-    sx = snapped.geometry.x.to_numpy()
-    sy = snapped.geometry.y.to_numpy()
-    s_pids = snapped["Paikka_Id"].astype(int).to_numpy()
-    s_basin = snapped["H_PaaVesal_Id"].fillna(-2).astype(int).to_numpy()
+    sx = river_gauges.geometry.x.to_numpy()
+    sy = river_gauges.geometry.y.to_numpy()
+    s_pids = river_gauges["Paikka_Id"].astype(int).to_numpy()
+    s_basin = river_gauges["H_PaaVesal_Id"].fillna(-2).astype(int).to_numpy()
     # Effective hydrological area accounts for cross-border upstream catchments (e.g. Lieksanjoki, Tornionjoki)
-    s_eff_area = np.maximum(snapped["area_km2"].to_numpy(), snapped["expected_area"].to_numpy() * 0.85)
+    s_eff_area = np.maximum(river_gauges["area_km2"].to_numpy(), river_gauges["expected_area"].to_numpy() * 0.85)
     s_log_a = np.log10(np.maximum(s_eff_area, 10.0))
 
     matched_pids = np.empty(len(missing_df), dtype=int)
@@ -332,15 +344,17 @@ def main():
         for sid, uid in zip(rivers["station_id"], rivers["uoma_id"])
     ]
 
-    # Save enriched stations_baseline.json (with calibrated effective drainage area)
+    # Save enriched stations_baseline.json (keeping auxiliary stations visible as point markers with true scale area)
     snapped_wgs = snapped.to_crs("EPSG:4326")
     baseline_out: dict[str, dict] = {}
     for _, row in snapped_wgs.iterrows():
         pid_str = str(int(row["Paikka_Id"]))
         st_stats = stats_by_pid[pid_str]
-        # Calibrate effective area using both Uoma10 graph area and climatological mean_q (~10.5 l/s/km² max long-term mean)
         clim_min_area = float(st_stats["mean_q"]) * 95.0
-        calibrated_area = max(float(row["area_km2"]), clim_min_area, 12.0)
+        if bool(row["is_auxiliary"]):
+            calibrated_area = max(clim_min_area, 12.0)
+        else:
+            calibrated_area = max(float(row["area_km2"]), clim_min_area, 12.0)
         baseline_out[pid_str] = {
             "name": str(row["Nimi"]).strip(),
             "municipality": str(row.get("KuntaNimi") or "").strip(),
