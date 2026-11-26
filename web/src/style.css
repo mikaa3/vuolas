@@ -522,7 +522,7 @@ body,
 
 .bar-row {
   display: grid;
-  grid-template-columns: 125px 1fr 76px;
+  grid-template-columns: 156px 1fr 78px;
   align-items: center;
   gap: 10px;
   font-size: 12px;

@@ -895,7 +895,6 @@ async function renderMetricsReport() {
     { label: "Below Normal (p16–35)", color: "#eab308", count: entries.filter((s) => s.pct > 15 && s.pct <= 35).length },
     { label: "Dry / Low (≤p15)", color: "#f59e0b", count: entries.filter((s) => s.pct <= 15).length },
   ];
-  const maxBucket = Math.max(...buckets.map((b) => b.count), 1);
 
   // 2. 30-day national daily aggregate gauged flow vs sum of station medians
   const dailySums = new Map();
@@ -981,9 +980,9 @@ async function renderMetricsReport() {
             .map(
               (b) => `
             <div class="bar-row">
-              <span>${b.label}</span>
+              <span style="white-space:nowrap;">${b.label}</span>
               <div class="bar-track">
-                <div class="bar-fill" style="width:${((b.count / maxBucket) * 100).toFixed(1)}%;background:${b.color};"></div>
+                <div class="bar-fill" style="width:${((b.count / total) * 100).toFixed(1)}%;background:${b.color};"></div>
               </div>
               <span class="bar-num">${b.count} (${Math.round((b.count / total) * 100)}%)</span>
             </div>`
